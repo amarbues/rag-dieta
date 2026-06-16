@@ -1,6 +1,13 @@
-def main():
-    print("Hello from rag-dieta!")
+import streamlit as st
 
 
-if __name__ == "__main__":
-    main()
+st.title("RAG Dieta")
+
+prompt = st.text_area(
+    "Fammi una domanda sulla tua dieta",
+    height="stretch",
+    value="Cosa posso mangiare oggi a pranzo?",
+)
+
+if st.button("Invia"):
+    st.write(f'Hai chiesto: "{prompt.strip()}"')
