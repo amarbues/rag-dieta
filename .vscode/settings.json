@@ -1,0 +1,13 @@
+{
+  // Run Ruff formatting on save
+  "editor.formatOnSave": true,
+
+  // Enable Ruff organize imports on save
+  "editor.codeActionsOnSave": {
+    "source.organizeImports.ruff": "explicit"
+  },
+
+  // Optional: ensure the Ruff extension provides the code action
+  "ruff.enable": true,
+  "ruff.lint.enable": true
+}
