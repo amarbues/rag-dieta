@@ -1,5 +1,7 @@
 import streamlit as st
+from langchain_community.document_loaders import PyPDFLoader
 
+from app.ingest import DocumentIngestor
 
 st.title("RAG Dieta")
 
@@ -10,4 +12,9 @@ prompt = st.text_area(
 )
 
 if st.button("Invia"):
-    st.write(f'Hai chiesto: "{prompt.strip()}"')
+    with st.spinner("Running..."):
+        chunks = DocumentIngestor(
+            PyPDFLoader,
+            loader_kwargs={"extraction_mode": "layout"},
+        ).ingest_pdf()
+    st.write(chunks)
