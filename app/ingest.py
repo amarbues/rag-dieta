@@ -14,11 +14,11 @@ class DocumentIngestor:
     def __init__(
         self,
         loader: type[Loader],
-        loader_kwargs: dict[str, Any] | None = None,
+        loader_kwargs: dict[str, Any] = {},
     ):
         self.path = Path("documents")
         self.loader = loader
-        self.loader_kwargs = loader_kwargs or {}
+        self.loader_kwargs = loader_kwargs
 
     def ingest_pdf(self):
         # load all documents
