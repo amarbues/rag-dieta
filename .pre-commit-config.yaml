@@ -7,3 +7,6 @@ repos:
       - id: ruff-check
       # Run the formatter.
       - id: ruff-format
+      # Organize imports.
+      - id: ruff
+        args: ["check", "--select", "I", "--fix"]
