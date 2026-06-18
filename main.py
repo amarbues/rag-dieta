@@ -7,10 +7,10 @@ from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import OllamaEmbeddings, OllamaLLM
 
-from app.ingest import DocumentIngestor
+from app.ingest import Ingestor
 
 StateObject = Literal[
-    "document_ingestor",
+    "ingestor",
     "discovered_chunks",
     "vectorstore_retriever",
     "retrieved_chunks",
@@ -22,23 +22,23 @@ state: dict[StateObject, Any] = {}
 
 
 def ingest_step() -> None:
-    state["document_ingestor"] = DocumentIngestor(
+    state["ingestor"] = Ingestor(
         loader=PyPDFLoader,
         loader_kwargs={"extraction_mode": "layout"},
         embedding_model=OllamaEmbeddings(model="qwen3-embedding:4b"),
     )
-    state["document_ingestor"].ingest_pdf()
+    state["ingestor"].ingest_pdf()
 
 
 def discovery_step() -> None:
-    ingestor: DocumentIngestor = state["document_ingestor"]
+    ingestor: Ingestor = state["ingestor"]
     discovered_chunks = ingestor.get_new_chunks()
     state["discovered_chunks"] = discovered_chunks
     st.sidebar.write(f"Discovered {len(discovered_chunks[0])} new chunks")
 
 
 def embed_step() -> None:
-    ingestor: DocumentIngestor = state["document_ingestor"]
+    ingestor: Ingestor = state["ingestor"]
     new_chunks, new_ids = state["discovered_chunks"]
     state["vectorstore_retriever"] = ingestor.embed_documents(new_chunks, new_ids)
 

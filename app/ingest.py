@@ -14,7 +14,7 @@ class Loader(Protocol):
     def load(self) -> list[Document]: ...
 
 
-class DocumentIngestor:
+class Ingestor:
     def __init__(
         self,
         loader: type[Loader],
