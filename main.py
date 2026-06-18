@@ -5,7 +5,7 @@ import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStoreRetriever
-from langchain_ollama import OllamaLLM
+from langchain_ollama import OllamaEmbeddings, OllamaLLM
 
 from app.ingest import DocumentIngestor
 
@@ -23,8 +23,9 @@ state: dict[StateObject, Any] = {}
 
 def ingest_step() -> None:
     state["document_ingestor"] = DocumentIngestor(
-        PyPDFLoader,
+        loader=PyPDFLoader,
         loader_kwargs={"extraction_mode": "layout"},
+        embedding_model=OllamaEmbeddings(model="qwen3-embedding:4b"),
     )
     state["document_ingestor"].ingest_pdf()
 

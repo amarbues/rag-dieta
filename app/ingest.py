@@ -4,8 +4,8 @@ from typing import Any, Protocol
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_core.vectorstores import VectorStoreRetriever
-from langchain_ollama import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
@@ -18,15 +18,18 @@ class DocumentIngestor:
     def __init__(
         self,
         loader: type[Loader],
-        loader_kwargs: dict[str, Any] = {},
+        loader_kwargs: dict[str, Any],
+        embedding_model: Embeddings,
     ):
         self.path = Path("documents")
         self.loader = loader
         self.loader_kwargs = loader_kwargs
         self.chunks: list[Document] = []
+
+        self.embedding_model = embedding_model
         self.vectorstore = Chroma(
             persist_directory="./chroma_db",
-            embedding_function=OllamaEmbeddings(model="qwen3-embedding:4b"),
+            embedding_function=embedding_model,
         )
 
     def ingest_pdf(self) -> None:
