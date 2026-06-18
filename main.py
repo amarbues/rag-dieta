@@ -1,18 +1,38 @@
 import time
+from typing import Any
 
 import streamlit as st
+from langchain.embeddings import Embeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings, OllamaLLM
 
-from app.ingest import Ingestor
-from app.rag import RAG
+from app.ingest import Ingestor, Loader
+from app.rag import LLM, RAG
+
+LOADER = PyPDFLoader
+LOADER_KWARGS = {"extraction_mode": "layout"}
+EMBEDDING_MODEL = OllamaEmbeddings(model="qwen3-embedding:4b")
+LLM_MODEL = OllamaLLM(model="qwen3.5:9b")
 
 
 class Pipeline:
     """Encapsulates the RAG pipeline state and operations."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        loader: type[Loader],
+        loader_kwargs: dict[str, Any],
+        embedding_model: Embeddings,
+        llm_model: LLM,
+    ):
+        # init variables
+        self.loader = loader
+        self.loader_kwargs = loader_kwargs
+        self.embedding_model = embedding_model
+        self.llm_model = llm_model
+
+        # pipeline state
         self.ingestor: Ingestor | None = None
         self.discovered_chunks: tuple[list[Document], list[str]] | None = None
         self.vectorstore_retriever = None
@@ -23,9 +43,9 @@ class Pipeline:
     def __ingest(self) -> None:
         """Load and chunk PDFs."""
         self.ingestor = Ingestor(
-            loader=PyPDFLoader,
-            loader_kwargs={"extraction_mode": "layout"},
-            embedding_model=OllamaEmbeddings(model="qwen3-embedding:4b"),
+            loader=self.loader,
+            loader_kwargs=self.loader_kwargs,
+            embedding_model=self.embedding_model,
         )
         self.ingestor.ingest_pdf()
 
@@ -52,7 +72,7 @@ class Pipeline:
 
         self.rag = RAG(
             vectorstore_retriever=self.vectorstore_retriever,
-            llm=OllamaLLM(model="qwen3.5:9b"),
+            llm=self.llm_model,
         )
         self.retrieved_chunks = self.rag.retrieve_chunks(prompt)
 
@@ -94,7 +114,12 @@ class Pipeline:
 
 # frontend logic #####################################################################################
 
-st.session_state.pipeline = Pipeline()
+st.session_state.pipeline = Pipeline(
+    loader=LOADER,
+    loader_kwargs=LOADER_KWARGS,
+    embedding_model=EMBEDDING_MODEL,
+    llm_model=LLM_MODEL,
+)
 
 st.set_page_config(
     layout="wide",
