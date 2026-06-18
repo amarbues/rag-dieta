@@ -25,12 +25,14 @@ class Pipeline:
         loader_kwargs: dict[str, Any],
         embedding_model: Embeddings,
         llm_model: LLM,
+        prompt: str,
     ):
         # init variables
         self.loader = loader
         self.loader_kwargs = loader_kwargs
         self.embedding_model = embedding_model
         self.llm_model = llm_model
+        self.prompt = prompt
 
         # pipeline state
         self.ingestor: Ingestor | None = None
@@ -65,7 +67,7 @@ class Pipeline:
         new_chunks, new_ids = self.discovered_chunks
         self.vectorstore_retriever = self.ingestor.embed_documents(new_chunks, new_ids)
 
-    def __retrieve(self, prompt: str) -> None:
+    def __retrieve(self) -> None:
         """Retrieve relevant chunks for the prompt."""
         if self.vectorstore_retriever is None:
             raise ValueError("Must run embed() first")
@@ -74,7 +76,7 @@ class Pipeline:
             vectorstore_retriever=self.vectorstore_retriever,
             llm=self.llm_model,
         )
-        self.retrieved_chunks = self.rag.retrieve_chunks(prompt)
+        self.retrieved_chunks = self.rag.retrieve_chunks(self.prompt)
 
         st.sidebar.write(f"Retrieved {len(self.retrieved_chunks)} chunks")
         st.sidebar.code(
@@ -83,24 +85,24 @@ class Pipeline:
             height=300,
         )
 
-    def __respond(self, prompt: str) -> None:
+    def __respond(self) -> None:
         """Generate response based on retrieved chunks."""
         if self.rag is None:
             raise ValueError("Must run retrieve() first")
 
         try:
-            self.chat_response = self.rag.generate_response(prompt)
+            self.chat_response = self.rag.generate_response(self.prompt)
         except Exception as e:
             self.chat_response = e
 
-    def run(self, prompt: str) -> None:
+    def run(self) -> None:
         """Execute the full pipeline."""
         steps = [
             ("Ingest", self.__ingest),
             ("Discover", self.__discover),
             ("Embed", self.__embed),
-            ("Retrieve", lambda: self.__retrieve(prompt)),
-            ("Respond", lambda: self.__respond(prompt)),
+            ("Retrieve", self.__retrieve),
+            ("Respond", self.__respond),
         ]
 
         for label, func in steps:
@@ -114,13 +116,6 @@ class Pipeline:
 
 # frontend logic #####################################################################################
 
-st.session_state.pipeline = Pipeline(
-    loader=LOADER,
-    loader_kwargs=LOADER_KWARGS,
-    embedding_model=EMBEDDING_MODEL,
-    llm_model=LLM_MODEL,
-)
-
 st.set_page_config(
     layout="wide",
 )
@@ -133,9 +128,16 @@ prompt = st.text_area(
     height="stretch",
     value="Quante verdure posso mangiare?",
 )
+st.session_state.pipeline = Pipeline(
+    loader=LOADER,
+    loader_kwargs=LOADER_KWARGS,
+    embedding_model=EMBEDDING_MODEL,
+    llm_model=LLM_MODEL,
+    prompt=prompt,
+)
 
 if st.button("Invia"):
     with st.spinner():
-        st.session_state.pipeline.run(prompt)
+        st.session_state.pipeline.run()
 
 st.write(st.session_state.pipeline.chat_response)
