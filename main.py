@@ -19,9 +19,16 @@ def ingest_step() -> None:
     state["ingestor"].ingest_pdf()
 
 
+def find_step() -> None:
+    ingestor: DocumentIngestor = state["ingestor"]
+    state["found"] = ingestor.get_new_chunks()
+    st.write(f"Found {len(state['found'][0])} new chunks")
+
+
 def embed_step() -> None:
     ingestor: DocumentIngestor = state["ingestor"]
-    state["retriever"] = ingestor.embed_documents()
+    new_chunks, new_ids = state["found"]
+    state["retriever"] = ingestor.embed_documents(new_chunks, new_ids)
 
 
 def retrieval_step() -> None:
@@ -31,8 +38,9 @@ def retrieval_step() -> None:
 
 steps = [
     ("Ingest", ingest_step),
+    ("Find", find_step),
     ("Embed", embed_step),
-    ("Retrieval", retrieval_step),
+    ("Retrieve", retrieval_step),
 ]
 
 # frontend logic
@@ -49,8 +57,9 @@ if st.button("Invia"):
         st.session_state.start_time = time.time()
         with st.spinner(f" {label}..."):
             func()
-        elapsed = time.time() - st.session_state.start_time
-        st.write(f"{label}: {elapsed:.2f} s")
+        elapsed = time.gmtime(time.time() - st.session_state.start_time)
+        st.write(f"{label}: {elapsed.tm_min}m {elapsed.tm_sec}s")
+        st.divider()
 
     if "results" in state:
         st.write(state["results"])
