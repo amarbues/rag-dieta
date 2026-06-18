@@ -51,27 +51,24 @@ def retrieve_step() -> None:
 
 def response_step() -> None:
     retrieved: list[Document] = state["retrieved_chunks"]
+    context = [d.page_content for d in retrieved]
 
-    context = "\n\n".join([d.page_content for d in retrieved])
-    # context = retrieved[0].page_content
-
-    model = OllamaLLM(model="qwen3.5:2b")
+    model = OllamaLLM(model="qwen3.5:9b")
 
     template = f"""
 Domanda:
 {prompt}
 
-Usa solo il contesto per rispondere alla domanda.
+Usa il contesto per rispondere alla domanda.
 Se il contesto non contiene la risposta, rispondi solo con "Non lo so.".
 
 Contesto:
 {context}"""
 
-    st.sidebar.text_area(
-        "Context",
-        value=template,
-        disabled=True,
-        height="stretch",
+    st.sidebar.code(
+        retrieved,
+        wrap_lines=True,
+        height=300,
     )
 
     try:
