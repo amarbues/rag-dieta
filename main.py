@@ -1,86 +1,101 @@
 import time
-from typing import Any, Literal
 
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings, OllamaLLM
 
 from app.ingest import Ingestor
 from app.rag import RAG
 
-StateObject = Literal[
-    "ingestor",
-    "discovered_chunks",
-    "vectorstore_retriever",
-    "rag",
-    "retrieved_chunks",
-    "chat_response",
-]
 
-# steps logic
-state: dict[StateObject, Any] = {}
+class Pipeline:
+    """Encapsulates the RAG pipeline state and operations."""
+
+    def __init__(self):
+        self.ingestor: Ingestor | None = None
+        self.discovered_chunks: tuple[list[Document], list[str]] | None = None
+        self.vectorstore_retriever = None
+        self.rag: RAG | None = None
+        self.retrieved_chunks: list[Document] | None = None
+        self.chat_response: str | Exception = ""
+
+    def __ingest(self) -> None:
+        """Load and chunk PDFs."""
+        self.ingestor = Ingestor(
+            loader=PyPDFLoader,
+            loader_kwargs={"extraction_mode": "layout"},
+            embedding_model=OllamaEmbeddings(model="qwen3-embedding:4b"),
+        )
+        self.ingestor.ingest_pdf()
+
+    def __discover(self) -> None:
+        """Discover new chunks not yet in vectorstore."""
+        if self.ingestor is None:
+            raise ValueError("Must run ingest() first")
+
+        self.discovered_chunks = self.ingestor.get_new_chunks()
+        st.sidebar.write(f"Discovered {len(self.discovered_chunks[0])} new chunks")
+
+    def __embed(self) -> None:
+        """Embed and store new chunks."""
+        if self.ingestor is None or self.discovered_chunks is None:
+            raise ValueError("Must run ingest() and discover() first")
+
+        new_chunks, new_ids = self.discovered_chunks
+        self.vectorstore_retriever = self.ingestor.embed_documents(new_chunks, new_ids)
+
+    def __retrieve(self, prompt: str) -> None:
+        """Retrieve relevant chunks for the prompt."""
+        if self.vectorstore_retriever is None:
+            raise ValueError("Must run embed() first")
+
+        self.rag = RAG(
+            vectorstore_retriever=self.vectorstore_retriever,
+            llm=OllamaLLM(model="qwen3.5:9b"),
+        )
+        self.retrieved_chunks = self.rag.retrieve_chunks(prompt)
+
+        st.sidebar.write(f"Retrieved {len(self.retrieved_chunks)} chunks")
+        st.sidebar.code(
+            self.retrieved_chunks,
+            wrap_lines=True,
+            height=300,
+        )
+
+    def __respond(self, prompt: str) -> None:
+        """Generate response based on retrieved chunks."""
+        if self.rag is None:
+            raise ValueError("Must run retrieve() first")
+
+        try:
+            self.chat_response = self.rag.generate_response(prompt)
+        except Exception as e:
+            self.chat_response = e
+
+    def run(self, prompt: str) -> None:
+        """Execute the full pipeline."""
+        steps = [
+            ("Ingest", self.__ingest),
+            ("Discover", self.__discover),
+            ("Embed", self.__embed),
+            ("Retrieve", lambda: self.__retrieve(prompt)),
+            ("Respond", lambda: self.__respond(prompt)),
+        ]
+
+        for label, func in steps:
+            start_time = time.time()
+            with st.sidebar.spinner(f" {label}..."):
+                func()
+            elapsed = time.gmtime(time.time() - start_time)
+            st.sidebar.caption(f"{label}: {elapsed.tm_min}m {elapsed.tm_sec}s")
+            st.sidebar.divider()
 
 
-def ingest_step() -> None:
-    state["ingestor"] = Ingestor(
-        loader=PyPDFLoader,
-        loader_kwargs={"extraction_mode": "layout"},
-        embedding_model=OllamaEmbeddings(model="qwen3-embedding:4b"),
-    )
-    state["ingestor"].ingest_pdf()
+# frontend logic #####################################################################################
 
+st.session_state.pipeline = Pipeline()
 
-def discovery_step() -> None:
-    ingestor: Ingestor = state["ingestor"]
-    discovered_chunks = ingestor.get_new_chunks()
-    state["discovered_chunks"] = discovered_chunks
-    st.sidebar.write(f"Discovered {len(discovered_chunks[0])} new chunks")
-
-
-def embed_step() -> None:
-    ingestor: Ingestor = state["ingestor"]
-    new_chunks, new_ids = state["discovered_chunks"]
-    state["vectorstore_retriever"] = ingestor.embed_documents(new_chunks, new_ids)
-
-
-def retrieve_step() -> None:
-    rag = RAG(
-        vectorstore_retriever=state["vectorstore_retriever"],
-        llm=OllamaLLM(model="qwen3.5:9b"),
-    )
-    state["rag"] = rag
-
-    retrieved_chunks = rag.retrieve_chunks(prompt)
-    state["retrieved_chunks"] = retrieved_chunks
-
-    st.sidebar.write(f"Retrieved {len(retrieved_chunks)} chunks")
-    st.sidebar.code(
-        state["retrieved_chunks"],
-        wrap_lines=True,
-        height=300,
-    )
-
-
-def response_step() -> None:
-    rag = state["rag"]
-
-    try:
-        response = rag.generate_response(prompt)
-    except Exception as e:
-        response = e
-
-    state["chat_response"] = response
-
-
-steps = [
-    ("Ingest", ingest_step),
-    ("Discover", discovery_step),
-    ("Embed", embed_step),
-    ("Retrieve", retrieve_step),
-    ("Respond", response_step),
-]
-
-# frontend logic
 st.set_page_config(
     layout="wide",
 )
@@ -96,13 +111,6 @@ prompt = st.text_area(
 
 if st.button("Invia"):
     with st.spinner():
-        for label, func in steps:
-            st.session_state.start_time = time.time()
-            with st.sidebar.spinner(f" {label}..."):
-                func()
-            elapsed = time.gmtime(time.time() - st.session_state.start_time)
-            st.sidebar.caption(f"{label}: {elapsed.tm_min}m {elapsed.tm_sec}s")
-            st.sidebar.divider()
+        st.session_state.pipeline.run(prompt)
 
-if "chat_response" in state:
-    st.write(state["chat_response"])
+st.write(st.session_state.pipeline.chat_response)
