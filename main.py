@@ -13,7 +13,7 @@ from app.rag import LLM, RAG
 LOADER = PyPDFLoader
 LOADER_KWARGS = {"extraction_mode": "layout"}
 EMBEDDING_MODEL = OllamaEmbeddings(model="qwen3-embedding:4b")
-CHUNK_SIZE = 1000
+CHUNK_SIZE = 400
 CHUNK_OVERLAP = 100
 LLM_MODEL = OllamaLLM(model="qwen3.5:9b")
 
