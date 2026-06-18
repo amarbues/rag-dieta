@@ -60,7 +60,7 @@ class Ingestor:
         new_chunks: list[Document] = []
         new_ids: list[str] = []
         for doc in self.chunks:
-            cid = _generate_chunk_id(doc)
+            cid = self.__generate_chunk_id(doc)
             if cid not in existing_ids and cid not in new_ids:
                 new_chunks.append(doc)
                 new_ids.append(cid)
@@ -69,7 +69,9 @@ class Ingestor:
         return new_chunks, new_ids
 
     def embed_documents(
-        self, new_chunks: list[Document], new_ids: list[str]
+        self,
+        new_chunks: list[Document],
+        new_ids: list[str],
     ) -> VectorStoreRetriever:
         if new_chunks:
             self.vectorstore.add_documents(
@@ -78,7 +80,6 @@ class Ingestor:
             )
         return self.vectorstore.as_retriever()
 
-
-def _generate_chunk_id(doc: Document):
-    """Generate a unique id for each chunk based on its content"""
-    return hashlib.md5(doc.page_content.encode()).hexdigest()
+    def __generate_chunk_id(self, doc: Document) -> str:
+        """Generate a unique id for each chunk based on its content"""
+        return hashlib.md5(doc.page_content.encode()).hexdigest()
