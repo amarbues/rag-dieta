@@ -26,10 +26,7 @@ class DocumentIngestor:
         self.chunks: list[Document] = []
         self.vectorstore = Chroma(
             persist_directory="./chroma_db",
-            embedding_function=OllamaEmbeddings(
-                model="qwen3-embedding:4b",
-                dimensions=4096,
-            ),
+            embedding_function=OllamaEmbeddings(model="qwen3-embedding:4b"),
         )
 
     def ingest_pdf(self) -> None:
@@ -44,8 +41,8 @@ class DocumentIngestor:
 
         # split documents into chunks
         chunks = RecursiveCharacterTextSplitter(
-            chunk_size=4096,
-            chunk_overlap=0,
+            chunk_size=400,
+            chunk_overlap=100,
         ).split_documents(all_docs)
 
         # return chunks
@@ -61,7 +58,7 @@ class DocumentIngestor:
         new_ids: list[str] = []
         for doc in self.chunks:
             cid = _generate_chunk_id(doc)
-            if cid not in existing_ids:
+            if cid not in existing_ids and cid not in new_ids:
                 new_chunks.append(doc)
                 new_ids.append(cid)
 

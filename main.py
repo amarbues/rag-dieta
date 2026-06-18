@@ -1,65 +1,118 @@
 import time
-from typing import Any
+from typing import Any, Literal
 
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
+from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStoreRetriever
+from langchain_ollama import OllamaLLM
 
 from app.ingest import DocumentIngestor
 
+StateObject = Literal[
+    "document_ingestor",
+    "discovered_chunks",
+    "vectorstore_retriever",
+    "retrieved_chunks",
+    "chat_response",
+]
+
 # steps logic
-state: dict[str, Any] = {}
+state: dict[StateObject, Any] = {}
 
 
 def ingest_step() -> None:
-    state["ingestor"] = DocumentIngestor(
+    state["document_ingestor"] = DocumentIngestor(
         PyPDFLoader,
         loader_kwargs={"extraction_mode": "layout"},
     )
-    state["ingestor"].ingest_pdf()
+    state["document_ingestor"].ingest_pdf()
 
 
-def find_step() -> None:
-    ingestor: DocumentIngestor = state["ingestor"]
-    state["found"] = ingestor.get_new_chunks()
-    st.write(f"Found {len(state['found'][0])} new chunks")
+def discovery_step() -> None:
+    ingestor: DocumentIngestor = state["document_ingestor"]
+    discovered_chunks = ingestor.get_new_chunks()
+    state["discovered_chunks"] = discovered_chunks
+    st.sidebar.write(f"Discovered {len(discovered_chunks[0])} new chunks")
 
 
 def embed_step() -> None:
-    ingestor: DocumentIngestor = state["ingestor"]
-    new_chunks, new_ids = state["found"]
-    state["retriever"] = ingestor.embed_documents(new_chunks, new_ids)
+    ingestor: DocumentIngestor = state["document_ingestor"]
+    new_chunks, new_ids = state["discovered_chunks"]
+    state["vectorstore_retriever"] = ingestor.embed_documents(new_chunks, new_ids)
 
 
-def retrieval_step() -> None:
-    retriever: VectorStoreRetriever = state["retriever"]
-    state["results"] = retriever.invoke(prompt)
+def retrieve_step() -> None:
+    retriever: VectorStoreRetriever = state["vectorstore_retriever"]
+    retrieved = retriever.invoke(prompt)
+    st.sidebar.write(f"Retrieved {len(retrieved)} chunks")
+    state["retrieved_chunks"] = retrieved
+
+
+def response_step() -> None:
+    retrieved: list[Document] = state["retrieved_chunks"]
+
+    context = "\n\n".join([d.page_content for d in retrieved])
+    # context = retrieved[0].page_content
+
+    model = OllamaLLM(model="qwen3.5:2b")
+
+    template = f"""
+Domanda:
+{prompt}
+
+Usa solo il contesto per rispondere alla domanda.
+Se il contesto non contiene la risposta, rispondi solo con "Non lo so.".
+
+Contesto:
+{context}"""
+
+    st.sidebar.text_area(
+        "Context",
+        value=template,
+        disabled=True,
+        height="stretch",
+    )
+
+    try:
+        response = model.invoke(template)
+    except Exception as e:
+        response = e
+
+    state["chat_response"] = response
 
 
 steps = [
     ("Ingest", ingest_step),
-    ("Find", find_step),
+    ("Discover", discovery_step),
     ("Embed", embed_step),
-    ("Retrieve", retrieval_step),
+    ("Retrieve", retrieve_step),
+    ("Respond", response_step),
 ]
 
 # frontend logic
+st.set_page_config(
+    layout="wide",
+)
+
+st.sidebar.header("Status")
 st.title("RAG Dieta")
 
 prompt = st.text_area(
     "Fammi una domanda sulla tua dieta",
     height="stretch",
-    value="Cosa posso mangiare oggi a pranzo?",
+    value="Quante verdure posso mangiare?",
 )
 
 if st.button("Invia"):
-    for label, func in steps:
-        st.session_state.start_time = time.time()
-        with st.spinner(f" {label}..."):
-            func()
-        elapsed = time.gmtime(time.time() - st.session_state.start_time)
-        st.write(f"{label}: {elapsed.tm_min}m {elapsed.tm_sec}s")
-        st.divider()
+    with st.spinner():
+        for label, func in steps:
+            st.session_state.start_time = time.time()
+            with st.sidebar.spinner(f" {label}..."):
+                func()
+            elapsed = time.gmtime(time.time() - st.session_state.start_time)
+            st.sidebar.caption(f"{label}: {elapsed.tm_min}m {elapsed.tm_sec}s")
+            st.sidebar.divider()
 
-    if "results" in state:
-        st.write(state["results"])
+if "chat_response" in state:
+    st.write(state["chat_response"])
