@@ -20,19 +20,22 @@ class Ingestor:
         loader: type[Loader],
         loader_kwargs: dict[str, Any],
         embedding_model: Embeddings,
+        chunk_size: int,
+        chunk_overlap: int,
     ):
         self.path = Path("documents")
         self.loader = loader
         self.loader_kwargs = loader_kwargs
-        self.chunks: list[Document] = []
-
+        self.chunks: list[Document]
         self.embedding_model = embedding_model
         self.vectorstore = Chroma(
             persist_directory="./chroma_db",
             embedding_function=embedding_model,
         )
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
 
-    def ingest_pdf(self) -> None:
+    def ingest_pdf(self) -> list[Document]:
         # load all documents
         all_docs: list[Document] = []
         for pdf_file in self.path.glob("*.pdf"):
@@ -44,12 +47,13 @@ class Ingestor:
 
         # split documents into chunks
         chunks = RecursiveCharacterTextSplitter(
-            chunk_size=400,
-            chunk_overlap=100,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
         ).split_documents(all_docs)
 
-        # return chunks
-        self.chunks.extend(chunks)
+        self.chunks = chunks
+
+        return chunks
 
     def get_new_chunks(self) -> tuple[list[Document], list[str]]:
         # get vectorstore and existing row ids

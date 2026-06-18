@@ -13,6 +13,8 @@ from app.rag import LLM, RAG
 LOADER = PyPDFLoader
 LOADER_KWARGS = {"extraction_mode": "layout"}
 EMBEDDING_MODEL = OllamaEmbeddings(model="qwen3-embedding:4b")
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 100
 LLM_MODEL = OllamaLLM(model="qwen3.5:9b")
 
 
@@ -24,6 +26,8 @@ class Pipeline:
         loader: type[Loader],
         loader_kwargs: dict[str, Any],
         embedding_model: Embeddings,
+        chunk_size: int,
+        chunk_overlap: int,
         llm_model: LLM,
         prompt: str,
     ):
@@ -31,6 +35,8 @@ class Pipeline:
         self.loader = loader
         self.loader_kwargs = loader_kwargs
         self.embedding_model = embedding_model
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
         self.llm_model = llm_model
         self.prompt = prompt
 
@@ -48,8 +54,15 @@ class Pipeline:
             loader=self.loader,
             loader_kwargs=self.loader_kwargs,
             embedding_model=self.embedding_model,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
         )
-        self.ingestor.ingest_pdf()
+        chunks = self.ingestor.ingest_pdf()
+        st.sidebar.code(
+            chunks,
+            wrap_lines=True,
+            height=300,
+        )
 
     def __discover(self) -> None:
         """Discover new chunks not yet in vectorstore."""
@@ -132,6 +145,8 @@ st.session_state.pipeline = Pipeline(
     loader=LOADER,
     loader_kwargs=LOADER_KWARGS,
     embedding_model=EMBEDDING_MODEL,
+    chunk_size=CHUNK_SIZE,
+    chunk_overlap=CHUNK_OVERLAP,
     llm_model=LLM_MODEL,
     prompt=prompt,
 )
