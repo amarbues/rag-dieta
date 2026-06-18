@@ -3,16 +3,16 @@ from typing import Any, Literal
 
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_core.documents import Document
-from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_ollama import OllamaEmbeddings, OllamaLLM
 
 from app.ingest import Ingestor
+from app.rag import RAG
 
 StateObject = Literal[
     "ingestor",
     "discovered_chunks",
     "vectorstore_retriever",
+    "rag",
     "retrieved_chunks",
     "chat_response",
 ]
@@ -44,36 +44,28 @@ def embed_step() -> None:
 
 
 def retrieve_step() -> None:
-    retriever: VectorStoreRetriever = state["vectorstore_retriever"]
-    retrieved = retriever.invoke(prompt)
-    st.sidebar.write(f"Retrieved {len(retrieved)} chunks")
-    state["retrieved_chunks"] = retrieved
+    rag = RAG(
+        vectorstore_retriever=state["vectorstore_retriever"],
+        llm=OllamaLLM(model="qwen3.5:9b"),
+    )
+    state["rag"] = rag
 
+    retrieved_chunks = rag.retrieve_chunks(prompt)
+    state["retrieved_chunks"] = retrieved_chunks
 
-def response_step() -> None:
-    retrieved: list[Document] = state["retrieved_chunks"]
-    context = [d.page_content for d in retrieved]
-
-    model = OllamaLLM(model="qwen3.5:9b")
-
-    template = f"""
-Domanda:
-{prompt}
-
-Usa il contesto per rispondere alla domanda.
-Se il contesto non contiene la risposta, rispondi solo con "Non lo so.".
-
-Contesto:
-{context}"""
-
+    st.sidebar.write(f"Retrieved {len(retrieved_chunks)} chunks")
     st.sidebar.code(
-        retrieved,
+        state["retrieved_chunks"],
         wrap_lines=True,
         height=300,
     )
 
+
+def response_step() -> None:
+    rag = state["rag"]
+
     try:
-        response = model.invoke(template)
+        response = rag.generate_response(prompt)
     except Exception as e:
         response = e
 
