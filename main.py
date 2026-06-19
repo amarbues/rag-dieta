@@ -3,6 +3,7 @@ from typing import Any
 
 import streamlit as st
 from langchain.embeddings import Embeddings
+from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings, OllamaLLM
@@ -13,9 +14,10 @@ from app.rag import LLM, RAG
 LOADER = PyPDFLoader
 LOADER_KWARGS = {"extraction_mode": "layout"}
 EMBEDDING_MODEL = OllamaEmbeddings(model="qwen3-embedding:4b")
-CHUNK_SIZE = 400
-CHUNK_OVERLAP = 100
+CHUNK_SIZE = 120
+CHUNK_OVERLAP = 20
 LLM_MODEL = OllamaLLM(model="qwen3.5:9b")
+K = 6
 
 
 class Pipeline:
@@ -29,6 +31,7 @@ class Pipeline:
         chunk_size: int,
         chunk_overlap: int,
         llm_model: LLM,
+        k: int,
         prompt: str,
     ):
         # init variables
@@ -38,14 +41,16 @@ class Pipeline:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.llm_model = llm_model
+        self.k = k
         self.prompt = prompt
 
         # pipeline state
         self.ingestor: Ingestor | None = None
         self.discovered_chunks: tuple[list[Document], list[str]] | None = None
-        self.vectorstore_retriever = None
+        self.vectorstore: Chroma | None = None
         self.rag: RAG | None = None
         self.retrieved_chunks: list[Document] | None = None
+        self.formatted_prompt: str | None = None
         self.chat_response: str | Exception = ""
 
     def __ingest(self) -> None:
@@ -69,7 +74,7 @@ class Pipeline:
         if self.ingestor is None:
             raise ValueError("Must run ingest() first")
 
-        self.discovered_chunks = self.ingestor.get_new_chunks()
+        self.discovered_chunks = self.ingestor.discover_chunks()
         st.sidebar.write(f"Discovered {len(self.discovered_chunks[0])} new chunks")
 
     def __embed(self) -> None:
@@ -78,18 +83,18 @@ class Pipeline:
             raise ValueError("Must run ingest() and discover() first")
 
         new_chunks, new_ids = self.discovered_chunks
-        self.vectorstore_retriever = self.ingestor.embed_documents(new_chunks, new_ids)
+        self.vectorstore = self.ingestor.embed_new_chunks(new_chunks, new_ids)
 
     def __retrieve(self) -> None:
         """Retrieve relevant chunks for the prompt."""
-        if self.vectorstore_retriever is None:
+        if self.vectorstore is None:
             raise ValueError("Must run embed() first")
 
         self.rag = RAG(
-            vectorstore_retriever=self.vectorstore_retriever,
+            vectorstore=self.vectorstore,
             llm=self.llm_model,
         )
-        self.retrieved_chunks = self.rag.retrieve_chunks(self.prompt)
+        self.retrieved_chunks = self.rag.retrieve_chunks(self.prompt, self.k)
 
         st.sidebar.write(f"Retrieved {len(self.retrieved_chunks)} chunks")
         st.sidebar.code(
@@ -98,13 +103,27 @@ class Pipeline:
             height=300,
         )
 
-    def __respond(self) -> None:
-        """Generate response based on retrieved chunks."""
+    def __prepare(self) -> None:
+        """Format prompt with context."""
         if self.rag is None:
             raise ValueError("Must run retrieve() first")
 
+        self.formatted_prompt = self.rag.prepare_prompt(self.prompt)
+
+        st.sidebar.text_area(
+            "Prompt",
+            value=self.formatted_prompt,
+            height=300,
+            disabled=True,
+        )
+
+    def __respond(self) -> None:
+        """Generate response based on retrieved chunks."""
+        if self.rag is None or self.formatted_prompt is None:
+            raise ValueError("Must run retrieve() and prepare() first")
+
         try:
-            self.chat_response = self.rag.generate_response(self.prompt)
+            self.chat_response = self.rag.generate_response()
         except Exception as e:
             self.chat_response = e
 
@@ -115,6 +134,7 @@ class Pipeline:
             ("Discover", self.__discover),
             ("Embed", self.__embed),
             ("Retrieve", self.__retrieve),
+            ("Prepare", self.__prepare),
             ("Respond", self.__respond),
         ]
 
@@ -141,6 +161,7 @@ prompt = st.text_area(
     height="stretch",
     value="Quante verdure posso mangiare?",
 )
+
 st.session_state.pipeline = Pipeline(
     loader=LOADER,
     loader_kwargs=LOADER_KWARGS,
@@ -148,6 +169,7 @@ st.session_state.pipeline = Pipeline(
     chunk_size=CHUNK_SIZE,
     chunk_overlap=CHUNK_OVERLAP,
     llm_model=LLM_MODEL,
+    k=K,
     prompt=prompt,
 )
 

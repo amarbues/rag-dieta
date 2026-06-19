@@ -1,7 +1,7 @@
 from typing import Any, Protocol
 
+from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_core.vectorstores import VectorStoreRetriever
 
 PROMPT_TEMPLATE = """
 Domanda:
@@ -22,21 +22,45 @@ class LLM(Protocol):
 class RAG:
     def __init__(
         self,
-        vectorstore_retriever: VectorStoreRetriever,
+        vectorstore: Chroma,
         llm: LLM,
     ) -> None:
-        self.vectorstore_retriever = vectorstore_retriever
+        self.vectorstore = vectorstore
         self.llm = llm
         self.retrieved_chunks: list[Document]
+        self.formatted_prompt: str = ""
 
-    def retrieve_chunks(self, prompt: str) -> list[Document]:
-        retrieved_chunks = self.vectorstore_retriever.invoke(prompt)
-        self.retrieved_chunks = retrieved_chunks
-        return retrieved_chunks
+    def retrieve_chunks(self, prompt: str, k: int) -> list[Document]:
+        docs_and_scores = self.vectorstore.similarity_search_with_score(prompt, k=k)
 
-    def generate_response(self, prompt: str) -> str:
-        context = [d.page_content for d in self.retrieved_chunks]
-        prompt = PROMPT_TEMPLATE.format(prompt=prompt, context=context)
-        # response = self.llm.invoke(prompt)
-        response = "ciao vai \n\n" + prompt
+        self.retrieved_chunks = []
+        seen_content: set[str] = set()
+        for doc, score in docs_and_scores:
+            # Inject the score into the metadata
+            doc.metadata["similarity_score"] = score
+
+            # dedup page_content, so we don't blow up context
+            if doc.page_content not in seen_content:
+                self.retrieved_chunks.append(doc)
+            seen_content.add(doc.page_content)
+
+        return self.retrieved_chunks
+
+    def prepare_prompt(self, prompt: str) -> str:
+        # 1. Extract the parent content instead of the small chunk
+        # 2. Use a set to deduplicate in case multiple chunks point to the same page
+        unique_parents: set[str] = set()
+        for doc in self.retrieved_chunks:
+            unique_parents.add(doc.metadata["parent_content"])
+
+        # 3. Join the unique parent pages
+        context_string = "\n\n--- NUOVA PAGINA ---\n\n".join(unique_parents)
+
+        self.formatted_prompt = PROMPT_TEMPLATE.format(
+            prompt=prompt, context=context_string
+        )
+        return self.formatted_prompt
+
+    def generate_response(self) -> str:
+        response = self.llm.invoke(self.formatted_prompt)
         return response
