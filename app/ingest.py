@@ -7,6 +7,8 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+PATH = Path("documents")
+
 
 class Loader(Protocol):
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
@@ -22,9 +24,6 @@ class Ingestor:
         chunk_size: int,
         chunk_overlap: int,
     ):
-        # init globals
-        self.path = Path("documents")
-
         # init variables
         self.loader = loader
         self.loader_kwargs = loader_kwargs
@@ -41,7 +40,7 @@ class Ingestor:
         ingested_chunks: list[Document] = []
 
         # process all pages
-        for pdf_file in self.path.glob("*.pdf"):
+        for pdf_file in PATH.glob("*.pdf"):
             raw_pages = self.loader(
                 str(pdf_file),
                 **self.loader_kwargs,

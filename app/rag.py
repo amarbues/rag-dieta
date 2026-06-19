@@ -1,3 +1,4 @@
+import datetime
 from typing import Any, Protocol
 
 from langchain_chroma import Chroma
@@ -31,15 +32,31 @@ class RAG:
         self.vectorstore = vectorstore
         self.k = k
         self.llm = llm
-        self.prompt = prompt
+        self.raw_prompt = prompt
 
         # pipeline state
+        self.rewritten_prompt: str
         self.retrieved_chunks: list[Document]
         self.formatted_prompt: str
 
+    def rewrite_prompt(self) -> str:
+        weekdays = [
+            "lunedi",
+            "martedi",
+            "mercoledi",
+            "giovedi",
+            "venerdi",
+            "sabato",
+            "domenica",
+        ]
+        today = datetime.date.today()
+        weekday = weekdays[today.weekday()]
+        self.rewritten_prompt = self.raw_prompt.lower().replace("oggi", weekday)
+        return self.rewritten_prompt
+
     def retrieve_chunks(self) -> list[Document]:
         docs_and_scores = self.vectorstore.similarity_search_with_score(
-            self.prompt,
+            self.raw_prompt,
             k=self.k,
         )
 
@@ -67,7 +84,8 @@ class RAG:
         context_string = "\n\n--- NUOVA PAGINA ---\n\n".join(unique_parents)
 
         self.formatted_prompt = PROMPT_TEMPLATE.format(
-            prompt=self.prompt, context=context_string
+            prompt=self.rewritten_prompt,
+            context=context_string,
         )
         return self.formatted_prompt
 

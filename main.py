@@ -51,7 +51,7 @@ class Pipeline:
         )
 
         # pipeline variables
-        self.chat_response: str | Exception
+        self.chat_response: str | Exception = ""
 
     def __ingest(self) -> None:
         """Load and chunk PDFs."""
@@ -71,6 +71,16 @@ class Pipeline:
         """Embed and store new chunks."""
         self.ingestor.embed_new_chunks()
 
+    def __rewrite(self) -> None:
+        """Rewrites prompt to be usable with context."""
+        rewritten_prompt = self.rag.rewrite_prompt()
+        st.sidebar.text_area(
+            "Rewritten Prompt",
+            value=rewritten_prompt,
+            height="stretch",
+            disabled=True,
+        )
+
     def __retrieve(self) -> None:
         """Retrieve relevant chunks for the prompt."""
         retrieved_chunks = self.rag.retrieve_chunks()
@@ -87,7 +97,7 @@ class Pipeline:
         st.sidebar.text_area(
             "Formatted Prompt",
             value=formatted_prompt,
-            height=300,
+            height="stretch",
             disabled=True,
         )
 
@@ -104,6 +114,7 @@ class Pipeline:
             ("Ingest", self.__ingest),
             ("Discover", self.__discover),
             ("Embed", self.__embed),
+            ("Rewrite", self.__rewrite),
             ("Retrieve", self.__retrieve),
             ("Prepare", self.__prepare),
             ("Respond", self.__respond),
