@@ -5,7 +5,6 @@ from typing import Any, Protocol
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
@@ -19,24 +18,27 @@ class Ingestor:
         self,
         loader: type[Loader],
         loader_kwargs: dict[str, Any],
-        embedding_model: Embeddings,
+        vectorstore: Chroma,
         chunk_size: int,
         chunk_overlap: int,
     ):
+        # init globals
         self.path = Path("documents")
+
+        # init variables
         self.loader = loader
         self.loader_kwargs = loader_kwargs
-        self.chunks: list[Document]
-        self.embedding_model = embedding_model
-        self.vectorstore = Chroma(
-            persist_directory="./chroma_db",
-            embedding_function=embedding_model,
-        )
+        self.vectorstore = vectorstore
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
+        # pipeline state
+        self.ingested_chunks: list[Document]
+        self.discovered_chunks: list[Document]
+        self.discovered_ids: list[str]
+
     def ingest_pdf(self) -> list[Document]:
-        processed_chunks: list[Document] = []
+        ingested_chunks: list[Document] = []
 
         # process all pages
         for pdf_file in self.path.glob("*.pdf"):
@@ -78,39 +80,35 @@ class Ingestor:
                     chunk.metadata["chunk_index"] = i
                     chunk.metadata["parent_content"] = rp.page_content
 
-                    processed_chunks.append(chunk)
+                    ingested_chunks.append(chunk)
 
-        self.chunks = processed_chunks
-        return processed_chunks
+        self.ingested_chunks = ingested_chunks
+        return ingested_chunks
 
-    def discover_chunks(self) -> tuple[list[Document], list[str]]:
+    def discover_chunks(self) -> int:
         # get vectorstore and existing row ids
         existing = self.vectorstore.get()
         existing_ids: set[str] = set(existing["ids"]) if existing["ids"] else set()
 
         # check if there are new chunks to be added to the vectorstore
-        new_chunks: list[Document] = []
-        new_ids: list[str] = []
-        for doc in self.chunks:
+        discovered_chunks: list[Document] = []
+        discovered_ids: list[str] = []
+        for doc in self.ingested_chunks:
             cid = self.__generate_chunk_id(doc)
-            if cid not in existing_ids and cid not in new_ids:
-                new_chunks.append(doc)
-                new_ids.append(cid)
+            if cid not in existing_ids and cid not in discovered_ids:
+                discovered_chunks.append(doc)
+                discovered_ids.append(cid)
 
-        # return chunks and ids
-        return new_chunks, new_ids
+        self.discovered_chunks = discovered_chunks
+        self.discovered_ids = discovered_ids
+        return len(discovered_chunks)
 
-    def embed_new_chunks(
-        self,
-        new_chunks: list[Document],
-        new_ids: list[str],
-    ) -> Chroma:
-        if new_chunks:
+    def embed_new_chunks(self) -> None:
+        if self.discovered_chunks:
             self.vectorstore.add_documents(
-                new_chunks,
-                ids=new_ids,
+                self.discovered_chunks,
+                ids=self.discovered_ids,
             )
-        return self.vectorstore
 
     def __generate_chunk_id(self, doc: Document) -> str:
         """Generate a unique id for each chunk based on its content"""

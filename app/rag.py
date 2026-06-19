@@ -23,15 +23,25 @@ class RAG:
     def __init__(
         self,
         vectorstore: Chroma,
+        k: int,
         llm: LLM,
+        prompt: str,
     ) -> None:
+        # init variables
         self.vectorstore = vectorstore
+        self.k = k
         self.llm = llm
-        self.retrieved_chunks: list[Document]
-        self.formatted_prompt: str = ""
+        self.prompt = prompt
 
-    def retrieve_chunks(self, prompt: str, k: int) -> list[Document]:
-        docs_and_scores = self.vectorstore.similarity_search_with_score(prompt, k=k)
+        # pipeline state
+        self.retrieved_chunks: list[Document]
+        self.formatted_prompt: str
+
+    def retrieve_chunks(self) -> list[Document]:
+        docs_and_scores = self.vectorstore.similarity_search_with_score(
+            self.prompt,
+            k=self.k,
+        )
 
         self.retrieved_chunks = []
         seen_content: set[str] = set()
@@ -46,7 +56,7 @@ class RAG:
 
         return self.retrieved_chunks
 
-    def prepare_prompt(self, prompt: str) -> str:
+    def prepare_prompt(self) -> str:
         # 1. Extract the parent content instead of the small chunk
         # 2. Use a set to deduplicate in case multiple chunks point to the same page
         unique_parents: set[str] = set()
@@ -57,7 +67,7 @@ class RAG:
         context_string = "\n\n--- NUOVA PAGINA ---\n\n".join(unique_parents)
 
         self.formatted_prompt = PROMPT_TEMPLATE.format(
-            prompt=prompt, context=context_string
+            prompt=self.prompt, context=context_string
         )
         return self.formatted_prompt
 
