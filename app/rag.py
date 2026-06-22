@@ -35,9 +35,9 @@ class RAG:
         self.raw_prompt = prompt
 
         # pipeline state
-        self.rewritten_prompt: str
-        self.retrieved_chunks: list[Document]
-        self.formatted_prompt: str
+        self.rewritten_prompt: str | None = None
+        self.retrieved_chunks: list[Document] | None = None
+        self.formatted_prompt: str | None = None
 
     def rewrite_prompt(self) -> str:
         weekdays = [
@@ -55,8 +55,11 @@ class RAG:
         return self.rewritten_prompt
 
     def retrieve_chunks(self) -> list[Document]:
+        if not self.rewritten_prompt:
+            raise ValueError("You must call rewrite_prompt() first")
+
         docs_and_scores = self.vectorstore.similarity_search_with_score(
-            self.raw_prompt,
+            self.rewritten_prompt,
             k=self.k,
         )
 
@@ -74,6 +77,9 @@ class RAG:
         return self.retrieved_chunks
 
     def prepare_prompt(self) -> str:
+        if not self.retrieved_chunks:
+            raise ValueError("You must call retrieve_chunks() first")
+
         # 1. Extract the parent content instead of the small chunk
         # 2. Use a set to deduplicate in case multiple chunks point to the same page
         unique_parents: set[str] = set()
@@ -90,5 +96,8 @@ class RAG:
         return self.formatted_prompt
 
     def generate_response(self) -> str:
+        if not self.formatted_prompt:
+            raise ValueError("You must call prepare_prompt() first")
+
         response = self.llm.invoke(self.formatted_prompt)
         return response

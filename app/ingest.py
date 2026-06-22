@@ -32,9 +32,9 @@ class Ingestor:
         self.chunk_overlap = chunk_overlap
 
         # pipeline state
-        self.ingested_chunks: list[Document]
-        self.discovered_chunks: list[Document]
-        self.discovered_ids: list[str]
+        self.ingested_chunks: list[Document] | None = None
+        self.discovered_chunks: list[Document] | None = None
+        self.discovered_ids: list[str] | None = None
 
     def ingest_pdf(self) -> list[Document]:
         ingested_chunks: list[Document] = []
@@ -85,6 +85,9 @@ class Ingestor:
         return ingested_chunks
 
     def discover_chunks(self) -> int:
+        if self.ingested_chunks is None:
+            raise ValueError("You must call ingest_pdf() first")
+
         # get vectorstore and existing row ids
         existing = self.vectorstore.get()
         existing_ids: set[str] = set(existing["ids"]) if existing["ids"] else set()
@@ -103,6 +106,9 @@ class Ingestor:
         return len(discovered_chunks)
 
     def embed_new_chunks(self) -> None:
+        if self.discovered_chunks is None:
+            raise ValueError("You must call discover_chunks() first")
+
         if self.discovered_chunks:
             self.vectorstore.add_documents(
                 self.discovered_chunks,
