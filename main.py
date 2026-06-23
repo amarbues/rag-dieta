@@ -17,7 +17,12 @@ VECTORSTORE = Chroma(
 )
 CHUNK_SIZE = 120
 CHUNK_OVERLAP = 20
-LLM_MODEL = OllamaLLM(model="qwen3.5:9b")
+LLM_MODEL = OllamaLLM(
+    model="gemma4:12b-mlx",
+    temperature=1.0,
+    top_p=0.95,
+    top_k=64,
+)
 K = 6
 
 
